@@ -9,21 +9,41 @@ from einops import rearrange, reduce, repeat
 from einops.layers.torch import Rearrange, Reduce
 
 class PatchEmbedding(nn.Module):
-    def __init__(self, in_channels: int = 3, patch_size: int = 16, emb_size: int = 768, img_size: int = 224):
-        self.patch_size = patch_size
+    """ Image to Patch Embedding
+    """
+    def __init__(self, in_channels: int = 3, patch_size: int = 16, emb_size: int = 768, img_size: int = 256):
         super().__init__()
-        self.projection = nn.Sequential(
-            # using a conv layer instead of a linear one -> performance gains
-            nn.Conv2d(in_channels, emb_size, kernel_size=patch_size, stride=patch_size),
-            Rearrange('b e (h) (w) -> b (h w) e'),
-        )
+        self.patch_size = patch_size
+        num_patches = (int(img_size/2) // self.patch_size) ** 2
+        self.num_patches = num_patches
+
+        self.proj1 = nn.Conv2d(in_channels, emb_size, kernel_size=patch_size, stride=patch_size)
+        self.proj2 = nn.Conv2d(in_channels, emb_size, kernel_size=patch_size*2, stride=patch_size*2)
+        self.proj3 = nn.Conv2d(in_channels, emb_size, kernel_size=patch_size*4, stride=patch_size*4)
+
+        #self.patch_embed = nn.Linear(3*embed_dim, embed_dim, bias=True)
         self.cls_token = nn.Parameter(torch.randn(1,1, emb_size))
-        self.positions = nn.Parameter(torch.randn((img_size // patch_size) **2 + 1, emb_size))
-    
-    def forward(self, x: Tensor) :
-        b, _, _, _ = x.shape
-        x = self.projection(x)
-        cls_tokens = repeat(self.cls_token, '() n e -> b n e', b=b)
+        self.positions = nn.Parameter(torch.randn(self.num_patches + 1, emb_size))
+
+    def forward(self, x):
+        B, C, H, W = x.shape
+        x1 = self.proj1(x)
+        x2 = self.proj2(x)
+        x3 = self.proj3(x)
+
+        x2_upsample = torch.stack([torch.stack([x2] * 2, dim=3)] * 2, dim=2)
+        x3_upsample = torch.stack([torch.stack([x3] * 4, dim=3)] * 4, dim=2)
+
+        x_p2 = x2_upsample.view(B,x1.size()[1],x1.size()[2], x1.size()[3])
+        x_p4 = x3_upsample.view(B,x1.size()[1],x1.size()[2], x1.size()[3])
+
+        #x = torch.cat((x1, x_p2, x_p4), dim=1).flatten(2).transpose(1, 2)
+        #x = self.patch_embed(x)
+
+        x = x1 + x_p2 + x_p4
+        x = x.flatten(2).transpose(1, 2)
+
+        cls_tokens = repeat(self.cls_token, '() n e -> b n e', b=B)
         # prepend the cls token to the input
         x = torch.cat([cls_tokens, x], dim=1)
         # add position embedding
