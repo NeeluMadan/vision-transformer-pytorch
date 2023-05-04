@@ -1,10 +1,9 @@
-import wandb
 import torch
 import random
 import argparse
 import time  
-import utils
-import config
+# import utils
+# import config
 import torch.nn as nn
 import torchvision
 import torch.nn.functional as F
@@ -27,11 +26,11 @@ def get_args_parser():
     parser = argparse.ArgumentParser(description='vision transformer')
     parser.add_argument('--data', type=str, default='imagenet', metavar='N',
                         help='data')
-    parser.add_argument('--data_path', type=str, default='/raid/create.nm43gr/ImageNet_100/imagenet/ILSVRC/Data/CLS-LOC', metavar='N',
+    parser.add_argument('--data_path', type=str, default='/home/nelu/MRPA_Projects/datasets/ImgNet_100', metavar='N',
                         help='data') 
     parser.add_argument('--model', type=str, default='vit', metavar='N',
                         help='model')
-    parser.add_argument('--batch_size', type=int, default=512, metavar='N',
+    parser.add_argument('--batch_size', type=int, default=32, metavar='N',
                         help='input batch size for training (default: 64)')
     parser.add_argument('--epochs', type=int, default=300, metavar='N',
                         help='number of epochs to train (default: 10)')
@@ -49,8 +48,8 @@ def get_args_parser():
                         help='alpha')
     parser.add_argument('--workers', type=int, default=4, metavar='N',
                         help='num_workers')                                         
-    parser.add_argument('--mode',type=str,default='None',
-                        help = 'train/val mode')                    
+    parser.add_argument('--mode',type=str,default='val',
+                        help = 'train/val')                    
     ## DDP
     parser.add_argument('--local_rank', default=-1, type=int)
     parser.add_argument('--gpu',type=str,default='0',
@@ -98,7 +97,7 @@ def main(args) :
             emb_size = 768,
             img_size = 256,
             depth = 12,
-            n_classes = 1000,
+            n_classes = 100,
             )
 
     if args.mode == 'train':
@@ -187,7 +186,7 @@ def main(args) :
             print(f"validation time : {time.time()-st}")
 
     if args.mode == 'val' : 
-        checkpoint = torch.load('ckpt path')
+        checkpoint = torch.load('./checkpoint_285.pth.tar')
         model = model.cuda()
         model.load_state_dict(checkpoint['state_dict'])
 
@@ -212,7 +211,6 @@ def main(args) :
                 out3 = model(data[:,:,mid_y:, 0:mid_x])
                 out4 = model(data[:,:,mid_y:, mid_x:])
                 output = (out1+out2+out3+out4)/2
-                output += 1e-8
             val_loss = criterion(output,target) 
             #val_loss = val_loss.item()
             #val_loss = reduce_tensor(val_loss.data)
@@ -221,12 +219,9 @@ def main(args) :
             total_acc5 += acc5[0]
 
             
-        print('\nval set: top1: {}, top5 : {} '.format(
-                experiment.log_metric(torch.mean(total_acc1)), experiment.log_metric(torch.mean(total_acc5))))
+        print('\nval set: top1: {}, top5 : {} '.format(torch.mean(total_acc1), torch.mean(total_acc5)))
         
         print(f"validation time : {time.time()-st}")
-    
-    cleanup()
 
 def save_checkpoint(state, filename='checkpoint.pth.tar'):
     torch.save(state, filename)

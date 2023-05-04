@@ -21,7 +21,7 @@ class PatchEmbedding(nn.Module):
         self.proj2 = nn.Conv2d(in_channels, emb_size, kernel_size=patch_size*2, stride=patch_size*2)
         self.proj3 = nn.Conv2d(in_channels, emb_size, kernel_size=patch_size*4, stride=patch_size*4)
 
-        #self.patch_embed = nn.Linear(3*embed_dim, embed_dim, bias=True)
+        self.patch_embed = nn.Linear(3*emb_size, emb_size, bias=True)
         self.cls_token = nn.Parameter(torch.randn(1,1, emb_size))
         self.positions = nn.Parameter(torch.randn(self.num_patches + 1, emb_size))
 
@@ -37,11 +37,8 @@ class PatchEmbedding(nn.Module):
         x_p2 = x2_upsample.view(B,x1.size()[1],x1.size()[2], x1.size()[3])
         x_p4 = x3_upsample.view(B,x1.size()[1],x1.size()[2], x1.size()[3])
 
-        #x = torch.cat((x1, x_p2, x_p4), dim=1).flatten(2).transpose(1, 2)
-        #x = self.patch_embed(x)
-
-        x = x1 + x_p2 + x_p4
-        x = x.flatten(2).transpose(1, 2)
+        x = torch.cat((x1, x_p2, x_p4), dim=1).flatten(2).transpose(1, 2)
+        x = self.patch_embed(x)
 
         cls_tokens = repeat(self.cls_token, '() n e -> b n e', b=B)
         # prepend the cls token to the input
@@ -129,7 +126,7 @@ class TransformerEncoder(nn.Sequential):
 
 
 class ClassificationHead(nn.Sequential):
-    def __init__(self, emb_size: int = 768, n_classes: int = 1000):
+    def __init__(self, emb_size: int = 768, n_classes: int = 100):
         super().__init__(
             Reduce('b n e -> b e', reduction='mean'),
             nn.LayerNorm(emb_size), 
@@ -143,7 +140,7 @@ class ViT(nn.Sequential):
                 emb_size: int = 768,
                 img_size: int = 224,
                 depth: int = 12,
-                n_classes: int = 1000,
+                n_classes: int = 100,
                 **kwargs):
         super().__init__(
             PatchEmbedding(in_channels, patch_size, emb_size, img_size),
